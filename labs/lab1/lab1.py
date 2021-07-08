@@ -60,6 +60,7 @@ def update():
     global ctr
     global curr_button
 
+    #Hello
     ctr += rc.get_delta_time()
         
     rc.drive.set_speed_angle(0, 0)
