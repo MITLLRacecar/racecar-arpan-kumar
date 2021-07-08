@@ -23,7 +23,8 @@ import racecar_utils as rc_utils
 rc = racecar_core.create_racecar()
 
 # Put any global variables here
-
+ctr = 0
+curr_button = " "
 ########################################################################################
 # Functions
 ########################################################################################
@@ -56,20 +57,80 @@ def update():
     After start() is run, this function is run every frame until the back button
     is pressed
     """
-    # TODO (warmup): Implement acceleration and steering
+    global ctr
+    global curr_button
+
+    ctr += rc.get_delta_time()
+        
     rc.drive.set_speed_angle(0, 0)
 
     if rc.controller.was_pressed(rc.controller.Button.A):
         print("Driving in a circle...")
-        # TODO (main challenge): Drive in a circle
-
-    # TODO (main challenge): Drive in a square when the B button is pressed
-
-    # TODO (main challenge): Drive in a figure eight when the X button is pressed
-
-    # TODO (main challenge): Drive in a shape of your choice when the Y button
-    # is pressed
-
+        curr_button = "a"
+        ctr = 0
+    elif rc.controller.was_pressed(rc.controller.Button.B):
+        print("Driving in a square...")
+        curr_button = "b"
+        ctr = 0
+    elif rc.controller.was_pressed(rc.controller.Button.X):
+        print("Driving in a figure eight...")
+        curr_button = "x"
+        ctr = 0
+    elif rc.controller.was_pressed(rc.controller.Button.Y):
+        print("Driving in a triangle...")
+        curr_button = "y"
+        ctr = 0
+    elif rc.controller.get_trigger(rc.controller.Trigger.RIGHT) != 0:
+        print("right trigger")
+        rc.drive.set_speed_angle(1, 0)
+    elif rc.controller.get_trigger(rc.controller.Trigger.LEFT) != 0:
+        print("left trigger")
+        rc.drive.set_speed_angle(-1, 0)
+    elif rc.controller.get_joystick(rc.controller.Joystick.LEFT) != 0:
+        left_joystick = rc.controller.get_joystick(rc.controller.Joystick.LEFT)
+        print("joystick: " + str(left_joystick))
+        rc.drive.set_speed_angle(0, left_joystick[0])
+    
+    if curr_button == "a":
+        rc.drive.set_speed_angle(1, 0.5)
+    elif curr_button == "b":
+        if ctr < 2:
+            rc.drive.set_speed_angle(0.5, 0)
+        elif ctr < 7:
+            rc.drive.set_speed_angle(0.5, 0.5)
+        elif ctr < 9:
+            rc.drive.set_speed_angle(0.5, 0)
+        elif ctr < 14:
+            rc.drive.set_speed_angle(0.5, 0.5)
+        elif ctr < 16:
+            rc.drive.set_speed_angle(0.5, 0)
+        elif ctr < 21:
+            rc.drive.set_speed_angle(0.5, 0.5)
+        elif ctr < 22:
+            rc.drive.set_speed_angle(0.5, 0)  
+    elif curr_button == "x":
+        if ctr < 5:
+            rc.drive.set_speed_angle(1, 1)
+        elif ctr < 10:
+            rc.drive.set_speed_angle(1, -1)
+        else:
+            ctr = 0
+    elif curr_button == "y":
+        if ctr < 3:
+            rc.drive.set_speed_angle(0.5, 0)
+        elif ctr < 7:
+            rc.drive.set_speed_angle(0.5, 0.75)
+        elif ctr < 10:
+            rc.drive.set_speed_angle(0.5, 0)
+        elif ctr < 14:
+            rc.drive.set_speed_angle(0.5, 0.75)
+        elif ctr < 17:
+            rc.drive.set_speed_angle(0.5, 0)
+        elif ctr < 21:
+            rc.drive.set_speed_angle(0.5, 0.75)
+        else:
+            ctr = 0
+    
 
 ########################################################################################
 # DO NOT MODIFY: Register start and update and begin execution
