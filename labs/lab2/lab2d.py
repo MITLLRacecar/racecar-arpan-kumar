@@ -11,7 +11,6 @@ Lab 2B - Color Image Cone Parking
 ########################################################################################
 
 import sys
-from typing import Counter
 import cv2 as cv
 import numpy as np
 
@@ -21,21 +20,12 @@ import racecar_utils as rc_utils
 
 from enum import IntEnum
 
-class State(IntEnum):
-    search = 0
-    obstacle = 1
-    approach = 2
-    stop = 3
-
 ########################################################################################
 # Global variables
 ########################################################################################
 
 rc = racecar_core.create_racecar()
 
-curr_state: State = State.search
-
-counter = 0
 # >> Constants
 # The smallest contour we will recognize as a valid contour
 MIN_CONTOUR_AREA = 30
@@ -43,14 +33,27 @@ MIN_CONTOUR_AREA = 30
 # The HSV range for the color orange, stored as (hsv_min, hsv_max)
 ORANGE = ((10, 100, 100), (20, 255, 255))
 
-MIN_AREA_THRESHOLD = 27500
-MAX_AREA_THRESHOLD = 28000
 # >> Variables
 speed = 0.0  # The current speed of the car
 angle = 0.0  # The current angle of the car's wheels
 contour_center = None  # The (pixel row, pixel column) of contour
 contour_area = 0  # The area of contour
+contour_area_error = 0
 
+min_area = 27900.0 # 29 cm
+max_area = 27000.0 # 31 cm
+goal_area = 27460.0
+
+area_admissable_error = 40 # 29-31 cm is about 900
+area_stopping_range = 15000 # roughly ~ 4 cm 
+angle_admissable_error = 0.1 # out of [-1, 1] range
+
+class State(IntEnum):
+    search = 0
+    approach = 1
+    stop = 2
+
+robot_state: State = State.search
 ########################################################################################
 # Functions
 ########################################################################################
@@ -99,13 +102,14 @@ def start():
     """
     global speed
     global angle
+    global robot_state
 
-    global curr_state
-    curr_state = State.search
+    robot_state = State.search
 
     # Initialize variables
     speed = 0
     angle = 0
+    #Maximum speed is 1 @ 100 CM or greater, Minimum is -0.5 at 0 CM.
 
     # Set initial driving speed and angle
     rc.drive.set_speed_angle(speed, angle)
@@ -116,7 +120,6 @@ def start():
     # Print start message
     print(">> Lab 2B - Color Image Cone Parking")
 
-
 def update():
     """
     After start() is run, this function is run every frame until the back button
@@ -124,46 +127,37 @@ def update():
     """
     global speed
     global angle
-    global counter
-    global curr_state
+    global robot_state
+    global contour_area_error
     # Search for contours in the current color image
     update_contour()
+    contour_area_error = goal_area - contour_area
 
     # TODO: Park the car 30 cm away from the closest orange cone
+
+    if robot_state == State.search:
+        search()
+
+        if contour_area != 0:
+            robot_state = State.approach
+            
+    elif robot_state == State.approach:
+        approach()
     
-    # move randomly
-    if curr_state == State.search:
-        angle = 1
-        speed = 1
-        if counter % 10 < 5.5:
-            angle = -1
+        if contour_area_error < area_admissable_error and rc.physics.get_linear_acceleration()[2] == 0 and speed < 0.02 : 
+            robot_state = State.stop
 
-        counter += rc.get_delta_time()
-        
-        if contour_area > MIN_CONTOUR_AREA:
-            curr_state = State.approach
+        if contour_area == 0:
+            robot_state = State.search
 
-    if curr_state == State.approach:
-
-        if contour_area < MIN_CONTOUR_AREA:
-            curr_state = State.search
-        
-        elif contour_center[0] > 389:
-            curr_state = State.stop
-    #30 cm : 388 px ht
-        else:
-            angle = remap(contour_center[1], 0, rc.camera.get_width(), -1, 1)
-            speed = speed_remap(contour_center[0], 0, 388, 1, 0)
-            # speed = 0.5
-        
-    if curr_state == State.stop:
-        speed = 0
+    elif robot_state == State.stop:
+        stop()
 
     rc.drive.set_speed_angle(speed, angle)
-    
+
     # Print the current speed and angle when the A button is held down
     if rc.controller.is_down(rc.controller.Button.A):
-        print("State:", curr_state, "Speed:", speed, "Angle:", angle)
+        print("Speed:", speed, "Angle:", angle)
 
     # Print the center and area of the largest contour when B is held down
     if rc.controller.is_down(rc.controller.Button.B):
@@ -171,45 +165,61 @@ def update():
             print("No contour found")
         else:
             print("Center:", contour_center, "Area:", contour_area)
-            
 
-def remap(val,old_min,old_max,new_min,new_max):
+def search():
+    global speed
+    global angle
+    speed = 1
+    angle = 1
 
-    len1 = abs(old_max - old_min)
-    len2 = abs(new_max - new_min)
-    scale = val/len1
-    scale_shift = scale*len2
-    if new_max > new_min:
-        val = new_min + scale_shift
-    else:
-        val = new_min - scale_shift
+def approach():
+    global speed
+    global angle
+    speed = throttle_controller()
+    angle = angle_controller()
 
-    if val > new_max:
-        val = new_max
-    elif val < new_min:
-        val = new_min
-    return val
+def stop(): 
+    global speed
+    global angle
+    speed = 0
+    angle = 0
 
-def speed_remap(val,old_min,old_max,new_min,new_max):
-    dist_old = abs(old_min-old_max)
-    dist_new = abs(new_max-new_min)
+def angle_controller():
+    kP = 1
+    angle = 0
+    if contour_center is not None: 
+        error = contour_center[1] - rc.camera.get_width() / 2
+        angle = kP * 2 * error/rc.camera.get_width()
+    return angle
+
+def throttle_controller(): 
+    #If within contour range, brake until acceleration = 0. 
+    global contour_area_error
+    global area_stopping_range
+    max_speed = 0.30
+    kP = 3
+    speed = 0
     
-    scale = dist_new/dist_old
-    
-    val = abs(val - old_min) * scale
+    if contour_area != 0: 
+        # if we are farther than the stopping range, apply full power
+        if contour_area_error > area_stopping_range : speed = max_speed
+        # elif contour_area < goal_area: speed = -.1
+        else :
+            # else scale our power by our error clamped within the stopping range
+            # error as a percentage instead of area
+            scale = 1 / area_stopping_range
+            speed = kP * contour_area_error * scale
 
-    if (new_min > new_max):
-        val = new_min - val
-    else:
-        val = new_min + val
-        
-    # if val >= new_max:
-    #     val = new_max
-    # elif val <= new_min:
-    #     val = new_min
-    return val
+    if speed > max_speed : speed = max_speed
+    elif speed < -max_speed : speed = -max_speed
+    return speed
 
 def update_slow():
+    global speed
+    global angle
+    print("Robot Status: " + str(robot_state))
+    print("Speed: " + str(speed))
+    print("Angle: " + str(angle))
     """
     After start() is run, this function is run at a constant rate that is slower
     than update().  By default, update_slow() is run once per second
