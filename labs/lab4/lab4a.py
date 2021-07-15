@@ -29,6 +29,8 @@ rc = racecar_core.create_racecar()
 FRONT_WINDOW = (-10, 10)
 REAR_WINDOW = (170, 190)
 
+DIST_STOPPING_RANGE = 200
+
 ########################################################################################
 # Functions
 ########################################################################################
@@ -55,6 +57,26 @@ def start():
         "    B button = print forward and back distances"
     )
 
+def proportional_controller(forward_dist): 
+    #If within contour range, brake until acceleration = 0. 
+    global DIST_STOPPING_RANGE
+    max_speed = 1
+    kP = 10
+    speed = 0
+    print(forward_dist)
+    # if we are farther than the stopping range, apply full power
+    if forward_dist > DIST_STOPPING_RANGE: 
+        speed = max_speed
+    else :
+        # else scale our power by our error clamped within the stopping range
+        # error as a percentage instead of area
+        scale = 1 / (kP * DIST_STOPPING_RANGE)
+        speed = forward_dist * scale
+    if speed > max_speed: 
+        speed = max_speed
+    elif speed < -max_speed:
+        speed = -max_speed
+    return speed 
 
 def update():
     """
@@ -77,8 +99,6 @@ def update():
     # Use the left joystick to control the angle of the front wheels
     angle = rc.controller.get_joystick(rc.controller.Joystick.LEFT)[0]
 
-    rc.drive.set_speed_angle(speed, angle)
-
     # Print the current speed and angle when the A button is held down
     if rc.controller.is_down(rc.controller.Button.A):
         print("Speed:", speed, "Angle:", angle)
@@ -87,8 +107,17 @@ def update():
     if rc.controller.is_down(rc.controller.Button.B):
         print("Forward distance:", forward_dist, "Back distance:", back_dist)
 
+    
+    if not (rc.controller.is_down(rc.controller.Button.RB) or rc.controller.is_down(rc.controller.Button.LB)):
+        speed = proportional_controller(forward_dist)
+        if speed <= 0.04:
+            speed = 0
+
+
+    rc.drive.set_speed_angle(speed, angle)
+    
     # Display the current LIDAR scan
-    rc.display.show_lidar(scan)
+    #rc.display.show_lidar(scan)
 
 
 ########################################################################################
