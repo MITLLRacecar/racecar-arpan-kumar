@@ -116,7 +116,7 @@ def update_contour():
             contour_area = 0
 
         # Display the image to the screen
-        rc.display.show_color_image(image)
+        #rc.display.show_color_image(image)
 
 def update():
     """
